@@ -1,0 +1,22 @@
+https://crates.io/crates/cargo-aoc
+
+Downloading your input manually
+cargo aoc input will download an input and store it in input/{year}/day_{day}.txt.
+
+Please note that by default, we're taking today's date as the argument. Of course, you can change this using : cargo aoc input -d {day} -y {year}
+
+Running your solution
+cargo aoc will run the latest implemented day, downloading your input beforehand. It will show you the result, and a short summary of how well it did perform.
+    
+AOC 2015
+Day 5 - Part 1 : 238
+        generator: 18.122µs,
+        runner: 420.958µs
+
+Day 5 - Part 2 : 69
+        generator: 5.499µs,
+        runner: 1.142373ms
+
+If you want to run an older puzzle, or only a specific part, specify those using cargo aoc -d {day} -p {part}.
+
+
