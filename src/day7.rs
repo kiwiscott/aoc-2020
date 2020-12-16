@@ -130,7 +130,7 @@ mod tests {
         let l = test_lines();
         let bg = BagMap::new(l);
         let found = bg.bags_within_bag("shiny gold");
-        assert_eq!(found-1, 32, "{:?}", found-1);
+        assert_eq!(found - 1, 32, "{:?}", found - 1);
     }
 
     fn test_lines() -> Vec<String> {

@@ -2,40 +2,47 @@ use aoc_runner_derive::{aoc, aoc_generator};
 use std::collections::HashMap;
 
 #[aoc_generator(day15)]
-fn parse_input(input: &str) -> Vec<usize> {
+fn parse_input(input: &str) -> Vec<i32> {
     input
         .split(',')
-        .map(|l| l.to_string().parse::<usize>().unwrap())
+        .map(|l| l.to_string().parse::<i32>().unwrap())
         .collect()
 }
 
 #[aoc(day15, part1)]
-fn part1(stanza: &[usize]) -> usize {
+fn part1(stanza: &[i32]) -> i32 {
     let mut emg = ElvenMemoryGame::new(stanza);
     emg.play_until(2020)
 }
 #[aoc(day15, part2)]
-fn part2(stanza: &[usize]) -> usize {
+fn part2(stanza: &[i32]) -> i32 {
     let mut emg = ElvenMemoryGame::new(stanza);
     emg.play_until(30000000)
 }
 
 struct ElvenMemoryGame {
-    turns: HashMap<usize, Vec<usize>>,
-    last: usize,
-    turn: usize,
+    turns: HashMap<i32, (i32, i32)>,
+    last: i32,
+    turn: i32,
 }
 
 impl ElvenMemoryGame {
-    pub fn new(stanza: &[usize]) -> Self {
-        let mut turns = HashMap::<usize, Vec<usize>>::new();
-        let turn: usize = stanza.len();
-        let mut last: usize = 0;
+    pub fn new(stanza: &[i32]) -> Self {
+        let mut turns = HashMap::<i32, (i32, i32)>::with_capacity(512);
+        let turn: i32 = stanza.len() as i32;
+        let mut last: i32 = 0;
 
         for i in stanza {
-            let turn_count = turns.len() + 1;
+            let turn_count = (turns.len() as i32) + 1;
 
-            turns.entry(*i).or_insert(vec![]).push(turn_count);
+            match turns.get_mut(i) {
+                Some(t) => {
+                    *t = (t.1, turn_count);
+                }
+                None => {
+                    turns.insert(*i, (0, turn_count));
+                }
+            };
 
             last = *i;
         }
@@ -46,28 +53,29 @@ impl ElvenMemoryGame {
             turn: turn,
         }
     }
-    pub fn next(&mut self) -> usize {
+    pub fn next(&mut self) -> i32 {
         self.turn += 1;
 
-        let l = self.turns.get(&self.last).unwrap();
+        let (first, last) = self.turns.get(&self.last).unwrap();
 
-        //println!("Turn {:?}: Last {:?} Turns {:?} ",self.turn, self.last, l);
-
-        let value = match l.len() == 1 {
+        let value = match first == &0 || last == &0 {
             true => 0,
-            false => {
-                let x = l.get(l.len() - 2..).unwrap();
-                x[1] - x[0]
+            false => last - first,
+        };
+
+        match self.turns.get_mut(&value) {
+            Some(t) => {
+                *t = (t.1, self.turn);
+            }
+            None => {
+                self.turns.insert(value, (0, self.turn));
             }
         };
 
-        //we have only seen this once
-        self.turns.entry(value).or_insert(vec![]).push(self.turn);
         self.last = value;
-        println!("{:?}:{:?}", self.turn,value);
         value
     }
-    pub fn play_until(&mut self, end_at: usize) -> usize {
+    pub fn play_until(&mut self, end_at: i32) -> i32 {
         while self.turn < end_at {
             self.next();
         }
@@ -142,10 +150,5 @@ mod tests {
         assert_eq!(0, emg.next()); //8
         assert_eq!(4, emg.next()); //9
         assert_eq!(0, emg.next()); //10
-
-        //Turn 1: The 1st number spoken is a starting number, 0.
-        //Turn 2: The 2nd number spoken is a starting number, 3.
-        //Turn 3: The 3rd number spoken is a starting number, 6.
-        //Turn 4: Now, consider the last number spoken, 6. Since that was the first time the number had been spoken, the 4th number spoken is 0.
     }
 }
