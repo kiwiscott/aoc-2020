@@ -128,7 +128,7 @@ fn part2((rules, my_ticket, others_tickets): &(Rules, Ticket, Tickets)) -> i64 {
             }
         }
     }
-    
+
     let x: Vec<i64> = allocated
         .iter()
         .filter(|(k, _v)| k.contains("departure"))
