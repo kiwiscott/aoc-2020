@@ -329,11 +329,7 @@ mod tests {
                 dimension
                     .cubes
                     .iter()
-                    .filter(|(c, s)| c.x == ec.x
-                        && c.y == ec.y
-                        && c.z == ec.z
-                        && c.w == ec.w
-                        && s == es)
+                    .filter(|c| c.x == ec.x && c.y == ec.y && c.z == ec.z && c.w == ec.w)
                     .count(),
                 "{:?} {:?}",
                 ec,
