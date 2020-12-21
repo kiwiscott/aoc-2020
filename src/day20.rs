@@ -3,154 +3,168 @@ use aoc_runner_derive::{aoc, aoc_generator};
 use regex::Regex;
 use std::collections::HashMap;
 
-#[derive(Debug, Clone)]
-enum MatchEdge {
-    None,
-    Any,
-    This(Vec<char>)
+#[aoc_generator(day20)]
+fn parse_input(input: &str) -> Vec<Tile> {
+    const WIDTH: usize = 10;
+    lazy_static! {
+        static ref ID: Regex = Regex::new(r"^Tile\W(\d*):$").unwrap();
+        static ref ROW: Regex = Regex::new(r"^([\.#]+)$").unwrap();
+    }
+    let mut result: HashMap<u16, Vec<String>> = HashMap::new();
+
+    let mut current_id: u16 = 0;
+    for line in input.lines() {
+        if ID.is_match(line) {
+            let caps = ID.captures(line).unwrap();
+            current_id = caps.get(1).unwrap().as_str().parse::<u16>().unwrap();
+        } else if ROW.is_match(line) {
+            let entry = result.entry(current_id).or_insert(vec![]);
+            entry.push(line.to_string());
+        }
+    }
+
+    result
+        .iter()
+        .map(|(k, v)| Tile::new(*k, v.to_vec()))
+        .collect::<Vec<Tile>>()
 }
 
-#[derive(Debug, Clone)]
+#[aoc(day20, part1)]
+fn part1(tiles: &[Tile]) -> u64 {
+    let mut b = Board::new(&tiles);
+    b.place();
+
+    print!("\n");
+    for i in 0..((b.dimension * b.dimension) as usize) {
+        if i % b.dimension as usize == 0 {
+            print!("\n");
+        }
+        print!(" {:?} ", b.tile_placement.get(i).unwrap().id);
+    }
+    print!("\n");
+
+    println!(
+        " Corners: [{:?},{:?},{:?},{:?}] \n",
+        b.tile_placement[0].id,
+        b.tile_placement[(b.dimension - 1) as usize].id,
+        b.tile_placement[((b.dimension * b.dimension) - (b.dimension)) as usize].id,
+        b.tile_placement[((b.dimension * b.dimension) - 1) as usize].id,
+    );
+
+    let xxxx: u64 = (b.tile_placement[0].id as u64)
+        * (b.tile_placement[(b.dimension - 1) as usize].id as u64)
+        * (b.tile_placement[((b.dimension * b.dimension) - (b.dimension)) as usize].id as u64)
+        * (b.tile_placement[((b.dimension * b.dimension) - 1) as usize].id as u64);
+    xxxx
+}
+
+const ITERATE_POSSIBLE_PIVOTS: [Move; 19] = [
+    //Normal
+    Move::RotateLeft,
+    Move::RotateLeft,
+    Move::RotateLeft,
+    Move::RotateLeft,
+    //Hoirontal Only
+    Move::HorizontalFlip,
+    Move::RotateLeft,
+    Move::RotateLeft,
+    Move::RotateLeft,
+    Move::RotateLeft,
+    //Horizontal and Vertical
+    Move::VerticalFlip,
+    Move::RotateLeft,
+    Move::RotateLeft,
+    Move::RotateLeft,
+    Move::RotateLeft,
+    //Vertical Only
+    Move::HorizontalFlip,
+    Move::RotateLeft,
+    Move::RotateLeft,
+    Move::RotateLeft,
+    Move::RotateLeft,
+];
+
+const EDGE_ARRAY: [Edge; 4] = [Edge::Top, Edge::Right, Edge::Bottom, Edge::Left];
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+enum Move {
+    HorizontalFlip,
+    VerticalFlip,
+    RotateLeft,
+}
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
 enum Edge {
+    None,
     Top,
     Bottom,
     Left,
     Right,
 }
-impl Edge {
-    fn cycle(&self, direction: i8) -> Self {
-        if direction == -1 {
-            match *self {
-                Self::Top => Self::Left,
-                Self::Left => Self::Bottom,
-                Self::Bottom => Self::Right,
-                Self::Right => Self::Top,
-            }
-        } else {
-            match *self {
-                Self::Top => Self::Right,
-                Self::Right => Self::Bottom,
-                Self::Bottom => Self::Left,
-                Self::Left => Self::Top,
-            }
-        }
-    }
-}
-const EDGE_ARRAY: [Edge; 4] = [Edge::Top, Edge::Right, Edge::Bottom, Edge::Left];
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq)]
-enum Rotation {
-    Zero = 0,
-    Ninety = 90,
-    OneEighty = 180,
-    TwoSeventy = 270,
-}
-
-impl Rotation {
-    fn offset(&self) -> usize {
-        match *self {
-            Self::Zero => 0,
-            Self::Ninety => 1,
-            Self::OneEighty => 2,
-            Self::TwoSeventy => 3,
-        }
-    }
-
-    fn next(&self) -> Self {
-        match *self {
-            Self::Zero => Self::Ninety,
-            Self::Ninety => Self::OneEighty,
-            Self::OneEighty => Self::TwoSeventy,
-            Self::TwoSeventy => Self::Zero,
-        }
-    }
+#[derive(Debug, Clone)]
+enum MatchEdge {
+    None,
+    Any,
+    This(Vec<char>),
 }
 
 #[derive(Debug, Clone)]
 struct Tile {
-    id: u64,
-    points: Vec<char>,
-    width: usize,
-    flipped_x: bool,
-    flipped_y: bool,
-    rotation: Rotation,
+    id: u16,
+    coords: Vec<String>,
 }
+
 impl Tile {
-    pub fn new(id: u64, width: usize, points: Vec<char>) -> Self {
-        let t = Self {
+    pub fn new(id: u16, coords: Vec<String>) -> Self {
+        Self {
             id: id,
-            width: width,
-            points: points,
-            flipped_x: false,
-            flipped_y: false,
-            rotation: Rotation::Zero,
-        };
-
-        t
-    }
-    pub fn edge(&self, edge: &Edge) -> Vec<char> {
-        let mut return_edge = edge.clone();
-        (0..self.rotation.offset()).for_each(|_| return_edge = return_edge.cycle(-1));
-
-        //should reverse
-        let reverse = match return_edge {
-            Edge::Top | Edge::Bottom => {
-                self.rotation == Rotation::OneEighty || self.rotation == Rotation::TwoSeventy
-            }
-            Edge::Left | Edge::Right => {
-                self.rotation == Rotation::Ninety || self.rotation == Rotation::OneEighty
-            }
-        };
-        /*
-        println!(
-            "Asking for:{:?} Rotation:{:?} Returning {:?} Reversed:{:?}",
-            edge, self.rotation, return_edge, reverse
-        );
-        */
-
-        let mut v = match return_edge {
-            Edge::Top => self.top(),
-            Edge::Right => self.right(),
-            Edge::Bottom => self.bottom(),
-            Edge::Left => self.left(),
-        };
-
-        if reverse {
-            v.reverse();
+            coords: coords,
         }
-        v
     }
 
-    fn top(&self) -> Vec<char> {
-        self.points
-            .iter()
-            .take(self.width)
-            .map(|x| *x)
-            .collect::<Vec<char>>()
+    pub fn edge(&self, edge: &Edge) -> String {
+        match edge {
+            Edge::Top => self.coords.first().unwrap().to_string(),
+            Edge::Bottom => self.coords.last().unwrap().to_string(),
+
+            Edge::Right => self
+                .coords
+                .iter()
+                .map(|m| m.chars().nth(0).unwrap())
+                .collect::<String>(),
+            Edge::Left => self
+                .coords
+                .iter()
+                .map(|m| m.chars().last().unwrap())
+                .collect::<String>(),
+            _ => unreachable!(),
+        }
     }
 
-    fn bottom(&self) -> Vec<char> {
-        let start = self.points.len() - self.width;
-        self.points
-            .iter()
-            .skip(start)
-            .map(|x| *x)
-            .collect::<Vec<char>>()
-    }
-    fn left(&self) -> Vec<char> {
-        self.points
-            .iter()
-            .step_by(self.width)
-            .map(|x| *x)
-            .collect::<Vec<char>>()
-    }
-    fn right(&self) -> Vec<char> {
-        self.points
-            .iter()
-            .skip(self.width - 1)
-            .step_by(self.width)
-            .map(|x| *x)
-            .collect::<Vec<char>>()
+    pub fn rotate(&self, direction: Move) -> Tile {
+        let new_coords = match direction {
+            Move::HorizontalFlip => self
+                .coords
+                .iter()
+                .map(|s| s.chars().rev().collect::<String>())
+                .collect(),
+            Move::VerticalFlip => self.coords.iter().rev().map(|s| s.to_string()).collect(),
+            Move::RotateLeft => {
+                let mut rotated = vec![];
+                for i in 0..self.coords.len() {
+                    let mut s = String::new();
+
+                    for x in self.coords.iter().rev() {
+                        s.push(x.chars().nth(i).unwrap());
+                    }
+                    rotated.push(s);
+                }
+                rotated
+            }
+        };
+
+        Self::new(self.id, new_coords)
     }
 
     pub fn matched_edges(&self, tiles: &[Tile]) -> usize {
@@ -161,14 +175,12 @@ impl Tile {
                 continue;
             }
             for e in EDGE_ARRAY.iter() {
-                let edge_vec = self.edge(e);
-
-                let mut rev_edge_vec = self.edge(e);
-                rev_edge_vec.reverse();
+                let edge_str = self.edge(e);
+                let rev_edge_str = self.edge(e).chars().rev().collect::<String>();
 
                 let m = EDGE_ARRAY
                     .iter()
-                    .any(|other_e| edge_vec == t.edge(other_e) || rev_edge_vec == t.edge(other_e));
+                    .any(|other_e| edge_str == t.edge(other_e) || rev_edge_str == t.edge(other_e));
 
                 if m {
                     matches.push(e);
@@ -178,228 +190,215 @@ impl Tile {
         }
         matches.iter().count()
     }
-
-    pub fn match(&mut self, top:MatchEdge ,right:MatchEdge ,bottom:MatchEdge ,left:MatchEdge ) -> Some((Rotation,Rotation))
-    {
-
-    }
 }
 
 struct Board {
-    dimension : usize,
-    tile_placement : HashMap<u32, (u64, Rotation)>,
+    dimension: u8,
+    tiles: Vec<Tile>,
+    tile_placement: Vec<Tile>,
 }
-impl Board{
-    pub fn new(dimension : usize) -> Self {
-        Board{
-            dimension : dimension, 
-            tile_placement :HashMap::<u32, (u64, Rotation)>::new()          
+
+impl Board {
+    pub fn new(tiles: &[Tile]) -> Self {
+        let dimension = (tiles.len() as f32).sqrt().abs();
+
+        Board {
+            dimension: dimension as u8,
+            tiles: tiles.to_vec(),
+            tile_placement: vec![],
         }
     }
+    pub fn first_corner(&self) -> Option<u16> {
+        let ts: Vec<u16> = self
+            .tiles
+            .iter()
+            .filter(|p| p.matched_edges(&self.tiles) == 2)
+            .map(|p| p.id)
+            .collect();
 
-    pub fn place(&self, tiles: Vec<Tiles>){
+        if ts.len() > 0 {
+            return Some(ts[0]);
+        }
+        None
+    }
+    pub fn place(&mut self) {
+        let corner_ids = self
+            .tiles
+            .iter()
+            .filter(|t| t.matched_edges(&self.tiles) == 2)
+            .map(|t| t.clone())
+            .collect::<Vec<Tile>>();
 
-        let x = self.tile_placement.len() / self.dimension; 
-        let y = self.tile_placement.len() % self.dimension;
+        let edge_ids = self
+            .tiles
+            .iter()
+            .filter(|t| t.matched_edges(&self.tiles) == 3)
+            .map(|t| t.clone())
+            .collect::<Vec<Tile>>();
 
-        let match_top = match y ==0{
-            true => MatchEdge::None, 
-            false => MatchEdge::Any
-        };
+        let center_ids = self
+            .tiles
+            .iter()
+            .filter(|t| t.matched_edges(&self.tiles) == 4)
+            .map(|t| t.clone())
+            .collect::<Vec<Tile>>();
 
-        let match_bottom = match y == (self.dimension-1) {
-            true => MatchEdge::None, 
-            false => MatchEdge::Any
-        };
-                 ;
-         let match_left =match x == 0 {
-            true => MatchEdge::None, 
-            false => MatchEdge::Any
-        };
+        //Build the Edge of the Puzzle by choosing the first corner
+        let first_corner = &corner_ids[0];
+        for e in edge_ids.iter() {
+            match self.fuse(first_corner.clone(), e.clone(), &Edge::Right) {
+                Some((t1, t2)) => {
+                    self.tile_placement.push(t1.clone());
+                    self.tile_placement.push(t2.clone());
+                    break;
+                }
+                None => continue,
+            }
+        }
 
-        let match_right  = match x == (self.dimension-1) {
-                true => MatchEdge::None, 
-                false => MatchEdge::Any
-        };
-        let mut to_place = tiles.clone();         
-        for t in self.orginal_tiles
-        {
-            for tp in to_place
-            {
-                if t.id == tp.id{
+        //Process the Normal Model HERE -- Lets try and first the row
+        loop {
+            let count = self.tile_placement.len();
+            let y = (count / (self.dimension as usize)) as u8;
+            let x = (count % (self.dimension as usize)) as u8;
+
+            let mut the_iter = center_ids.iter();
+            let mut edge_to_attach = Edge::Right;
+            let mut to_attach_to = self.tile_placement.last().unwrap().clone();
+
+            if (y == 0 || y == self.dimension - 1) && (x == 0 || x == self.dimension - 1) {
+                the_iter = corner_ids.iter();
+            } else if (y == 0 || y == self.dimension - 1) || (x == 0 || x == self.dimension - 1) {
+                the_iter = edge_ids.iter();
+            }
+
+            if x == 0 {
+                //we need to attach to the bottom of the row above
+                edge_to_attach = Edge::Bottom;
+                to_attach_to = self
+                    .tile_placement
+                    .get(((y - 1) * self.dimension) as usize)
+                    .unwrap()
+                    .clone();
+            }
+
+            let id = to_attach_to.id;
+
+            for e in the_iter {
+                if e.id == id || self.tile_placement.iter().any(|p| p.id == e.id) {
                     continue;
                 }
-                let orientation = t.match(tp, match_top, match_left,match_bottom,match_top);
 
+                match self.fuse_one(to_attach_to.clone(), e.clone(), &edge_to_attach) {
+                    Some(t2) => {
+                        self.tile_placement.push(t2.clone());
+                        break;
+                    }
+                    None => (),
+                }
             }
-        }
-    }
-}
 
-#[aoc_generator(day20)]
-fn parse_input(input: &str) -> Vec<Tile> {
-    const WIDTH: usize = 10;
-    lazy_static! {
-        static ref ID: Regex = Regex::new(r"^Tile\W(\d*):$").unwrap();
-        static ref ROW: Regex = Regex::new(r"^([\.#]+)$").unwrap();
-    }
-    let mut result: HashMap<u64, Vec<char>> = HashMap::new();
-
-    let mut current_id: u64 = 0;
-    for line in input.lines() {
-        if ID.is_match(line) {
-            let caps = ID.captures(line).unwrap();
-            current_id = caps.get(1).unwrap().as_str().parse::<u64>().unwrap();
-        } else if ROW.is_match(line) {
-            let entry = result.entry(current_id).or_insert(vec![]);
-            for c in line.chars() {
-                entry.push(c);
+            if count == self.tile_placement.len() {
+                break;
             }
         }
     }
 
-    result
-        .iter()
-        .map(|(k, v)| Tile::new(*k, WIDTH, v.to_vec()))
-        .collect::<Vec<Tile>>()
-}
+    fn fuse_one(&self, t1: Tile, t2: Tile, edge_from: &Edge) -> Option<Tile> {
+        let mut t2 = t2.clone();
 
-#[aoc(day20, part1)]
-fn part1(tiles: &[Tile]) -> u64 {
-    
+        let edge_we_need_to_find = match edge_from {
+            Edge::Top => Edge::Bottom,
+            Edge::Bottom => Edge::Top,
+            Edge::Left => Edge::Right,
+            Edge::Right => Edge::Left,
+            _ => unreachable!(),
+        };
 
-    let corner_ids = tiles
-        .iter()
-        .filter(|t| t.matched_edges(tiles) == 2)
-        .map(|t| t.id)
-        .collect::<Vec<u64>>();
+        for p1 in ITERATE_POSSIBLE_PIVOTS.iter() {
+            if t1.edge(edge_from) == t2.edge(&edge_we_need_to_find) {
+                return Some(t2);
+            }
+            t2 = t2.rotate(*p1);
+        }
 
-    let edge_ids = tiles
-        .iter()
-        .filter(|t| t.matched_edges(tiles) == 3)
-        .map(|t| t.id)
-        .collect::<Vec<u64>>();
+        return None;
+    }
 
-    let center_ids = tiles
-        .iter()
-        .filter(|t| t.matched_edges(tiles) == 4)
-        .map(|t| t.id)
-        .collect::<Vec<u64>>();
+    fn fuse(&self, t1: Tile, t2: Tile, edge_from: &Edge) -> Option<(Tile, Tile)> {
+        let edge_to = match edge_from {
+            Edge::Top => Edge::Bottom,
+            Edge::Bottom => Edge::Bottom,
+            Edge::Left => Edge::Right,
+            Edge::Right => Edge::Left,
+            _ => unreachable!(),
+        };
 
-    println!("Corners: {:?} \n", corner_ids);
-    println!("Edges: {:?} \n", edge_ids);
-    println!("Centers: {:?} \n", center_ids);
+        let mut t1 = t1.clone();
+        let mut t2 = t2.clone();
 
-    corner_ids.iter().product::<u64>()
+        for p in ITERATE_POSSIBLE_PIVOTS.iter() {
+            for p1 in ITERATE_POSSIBLE_PIVOTS.iter() {
+                if t1.edge(edge_from) == t2.edge(&edge_to) {
+                    return Some((t1, t2));
+                }
+                t2 = t2.rotate(*p1);
+            }
+            t1 = t1.rotate(*p);
+        }
+
+        return None;
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn parse_first_part() {
-        let p = parse_input(&SINGLE);
-        assert_eq!(1, p.len());
-    }
-
-    #[test]
-    fn check_edges_and_rotations() {
-        let mut p = parse_input(&SINGLE);
-        let mut tile = p.first_mut().unwrap();
-
-        let top: Vec<char> = "..##.#..#.".chars().collect();
-        let bottom: Vec<char> = "..###..###".chars().collect();
-        let left: Vec<char> = ".#####..#.".chars().collect();
-        let right: Vec<char> = "...#.##..#".chars().collect();
-
-        let mut rtop: Vec<char> = top.clone();
-        rtop.reverse();
-
-        let mut rbottom: Vec<char> = bottom.clone();
-        rbottom.reverse();
-
-        let mut rleft: Vec<char> = left.clone();
-        rleft.reverse();
-
-        let mut rright: Vec<char> = right.clone();
-        rright.reverse();
-
-        tile.rotation = Rotation::Zero;
-        assert_eq!(tile.edge(&Edge::Top), top, "TOP 0");
-        assert_eq!(tile.edge(&Edge::Bottom), bottom, "BOTTOM 0");
-        assert_eq!(tile.edge(&Edge::Left), left, "LEFT 0");
-        assert_eq!(tile.edge(&Edge::Right), right, "RIGHT 0");
-
-        tile.rotation = Rotation::Ninety;
-        assert_eq!(tile.edge(&Edge::Top), rleft, "TOP 90");
-        assert_eq!(tile.edge(&Edge::Bottom), rright, "BOTTOM 90");
-        assert_eq!(tile.edge(&Edge::Left), bottom, "LEFT 90");
-        assert_eq!(tile.edge(&Edge::Right), top, "RIGHT 90");
-
-        tile.rotation = Rotation::OneEighty;
-        assert_eq!(tile.edge(&Edge::Top), rbottom, "TOP 180");
-        assert_eq!(tile.edge(&Edge::Bottom), rtop, "BOTTOM 180");
-        assert_eq!(tile.edge(&Edge::Left), rright, "LEFT 180");
-        assert_eq!(tile.edge(&Edge::Right), rleft, "RIGHT 180");
-
-        tile.rotation = Rotation::TwoSeventy;
-        assert_eq!(tile.edge(&Edge::Top), right, "TOP 270");
-        assert_eq!(tile.edge(&Edge::Bottom), left, "BOTTOM 270");
-        assert_eq!(tile.edge(&Edge::Left), rtop, "LEFT 270");
-        assert_eq!(tile.edge(&Edge::Right), rbottom, "RIGHT 270");
-    }
-
-    #[test]
-    fn parse_first_example() {
-        let p = parse_input(&FIRST_EXAMPLE);
-        assert_eq!(9, p.len());
-    }
-    #[test]
-    fn edges_without_match() {
-        let p = parse_input(&FIRST_EXAMPLE);
-        let tile = p.iter().find(|x| x.id == 1951).unwrap();
-        println!("{:?}", tile.matched_edges(&p));
-        assert_eq!(2, tile.matched_edges(&p));
-    }
-    #[test]
-    fn edges_with_match() {
-        let p = parse_input(&FIRST_EXAMPLE);
-        let tile = p.iter().find(|x| x.id == 1427).unwrap();
-        println!("{:?}", tile.matched_edges(&p));
-        assert_eq!(4, tile.matched_edges(&p));
-    }
-    #[test]
-    fn board() {
-        let tiles = parse_input(&FIRST_EXAMPLE);
-        let mut board= Board::new(tiles.len()); 
-        board.place(&tiles);
-
-        assert_eq!(board.tile_placement.get(&0),(1951,Rotation::OneEighty));
-
-        /*
-        1951    2311    3079
-        2729    1427    2473
-        2971    1489    1171
-        */
-    }
-
     #[test]
     fn rotate_test() {
-        let s_vec =  vec!("123", "456","789");
-        //flip v
-        let v = s_vec.iter().map(|s|s.chars().rev().collect::<String>()).collect::<String>();
-        assert_eq!(1, v.len());
+        let at = Tile::new(
+            1,
+            vec!["123".to_string(), "456".to_string(), "789".to_string()],
+        );
 
-        
-        /*
-        1951    2311    3079
-        2729    1427    2473
-        2971    1489    1171
-        */
+        let mut t = at.rotate(Move::HorizontalFlip);
+        assert_eq!(t.coords, vec!["321", "654", "987"]);
+
+        t = at.rotate(Move::VerticalFlip);
+        assert_eq!(t.coords, vec!["789", "456", "123"]);
+
+        t = at.rotate(Move::RotateLeft);
+        assert_eq!(t.coords, vec!["741", "852", "963"]);
     }
 
+    #[test]
+    fn edge_test() {
+        let t = Tile::new(
+            1,
+            vec!["123".to_string(), "456".to_string(), "789".to_string()],
+        );
+        assert_eq!(t.edge(&Edge::Top), "123");
+        assert_eq!(t.edge(&Edge::Bottom), "789");
+        assert_eq!(t.edge(&Edge::Right), "147");
+        assert_eq!(t.edge(&Edge::Left), "369");
+    }
+    #[test]
+    fn place_test() {
+        let tiles = parse_input(&FIRST_EXAMPLE);
+        let mut b = Board::new(&tiles);
+        b.place();
+        assert_eq!(9, b.tile_placement.len());
+    }
+    #[test]
+    fn firse_corner_test() {
+        let tiles = parse_input(&FIRST_EXAMPLE);
 
+        let mut b = Board::new(&tiles);
+        match b.first_corner() {
+            Some(n) => assert!(n == 1951_u16 || n == 3079_u16 || n == 2971_u16 || n == 1171_u16),
+            None => assert_eq!("", "1", "NO CORNERS FOUND"),
+        }
+    }
 
     lazy_static! {
         static ref SINGLE: String = [
