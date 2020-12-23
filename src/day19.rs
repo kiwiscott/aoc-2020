@@ -119,10 +119,10 @@ fn process_rule(rule: &Part, rule_set: &HashMap<i32, Part>) -> String {
             s.push_str("+");
         }
         Part::RecursiveMatch(set) => {
-            //We must match this recursion one or more times. 
+            //We must match this recursion one or more times.
             //The problem with this appraoch is that we have to match to a set number of times (e.g. 10 below because both sides must match)
-            // os we nned a match something like ( (a[1]b[1]) | (a[2]b[2]) || ... ) 
-            //but we can't match ( (a[1]b[2]) | (a[2]b[1]) || ... ) 
+            // os we nned a match something like ( (a[1]b[1]) | (a[2]b[2]) || ... )
+            //but we can't match ( (a[1]b[2]) | (a[2]b[1]) || ... )
 
             s.push_str("(?:");
             for i in 1..10 {
