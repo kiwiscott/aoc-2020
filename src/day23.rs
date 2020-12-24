@@ -122,6 +122,7 @@ impl CrabCups {
         }
     }
 
+    #[allow(dead_code)]
     fn order_cups(&self) -> Vec<usize> {
         let mut n = 0;
         /* println!(
