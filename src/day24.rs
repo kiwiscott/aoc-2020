@@ -39,20 +39,6 @@ fn parse_input(input: &str) -> Vec<Directions> {
 }
 
 type Directions = Vec<Direction>;
-trait Offset {
-    // Traits can provide default method definitions.
-    fn offset(&self) -> Point;
-}
-
-// Implement the `Animal` trait for `Sheep`.
-impl Offset for Directions {
-    fn offset(&self) -> Point {
-        self.iter().fold(Point::zero(), |point, direction| {
-            point.adjacent_point(*direction)
-        })
-    }
-}
-
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 struct Point {
     x: i32,
@@ -68,44 +54,6 @@ impl Point {
     fn zero() -> Self {
         Point { x: 0, y: 0, z: 0 }
     }
-    fn adjacent_point(&self, direction: Direction) -> Self {
-        let (mut x, mut y, mut z) = (0, 0, 0);
-
-        match direction {
-            Direction::East => {
-                x += -1;
-                y += 1;
-                z += 0;
-            }
-            Direction::SouthEast => {
-                x += -1;
-                y += 0;
-                z += 1;
-            }
-            Direction::SouthWest => {
-                x += 0;
-                y += -1;
-                z += 1;
-            }
-            Direction::West => {
-                x += 1;
-                y += -1;
-                z += 0;
-            }
-            Direction::NorthWest => {
-                x += 1;
-                y += 0;
-                z += -1;
-            }
-            Direction::NorthEast => {
-                x += 0;
-                y += 1;
-                z += -1;
-            }
-        }
-
-        Point::new(self.x + x, self.y + y, self.z + z)
-    }
     fn adjacent_points(&self) -> Vec<Point> {
         [
             Direction::East,
@@ -118,6 +66,50 @@ impl Point {
         .iter()
         .map(|d| self.adjacent_point(*d))
         .collect::<Vec<Point>>()
+    }
+    fn adjacent_point(&self, direction: Direction) -> Self {
+        self.offset_point(&[direction])
+    }
+
+    fn offset_point(&self, directions: &[Direction]) -> Self {
+        let (mut x, mut y, mut z) = (0, 0, 0);
+
+        for direction in directions {
+            match direction {
+                Direction::East => {
+                    x += -1;
+                    y += 1;
+                    z += 0;
+                }
+                Direction::SouthEast => {
+                    x += -1;
+                    y += 0;
+                    z += 1;
+                }
+                Direction::SouthWest => {
+                    x += 0;
+                    y += -1;
+                    z += 1;
+                }
+                Direction::West => {
+                    x += 1;
+                    y += -1;
+                    z += 0;
+                }
+                Direction::NorthWest => {
+                    x += 1;
+                    y += 0;
+                    z += -1;
+                }
+                Direction::NorthEast => {
+                    x += 0;
+                    y += 1;
+                    z += -1;
+                }
+            }
+        }
+
+        Point::new(self.x + x, self.y + y, self.z + z)
     }
 }
 
@@ -136,7 +128,7 @@ fn part1(directions: &[Directions]) -> usize {
     let mut black_tiles = HashSet::new();
 
     for d in directions {
-        let offset = d.offset();
+        let offset = Point::zero().offset_point(d);
         if !black_tiles.remove(&offset) {
             black_tiles.insert(offset);
         }
@@ -151,14 +143,13 @@ fn part2(directions: &[Directions]) -> usize {
     let mut black_tiles = HashSet::new();
 
     for d in directions {
-        let offset = d.offset();
+        let offset = Point::zero().offset_point(d);
         if !black_tiles.remove(&offset) {
             black_tiles.insert(offset);
         }
     }
-    
     for _i in 1..=100 {
-        let x = black_tiles.len();
+        //let x = black_tiles.len();
         //Add all the tiles that are not currently accounted for
 
         //existing_tiles
@@ -226,7 +217,7 @@ mod tests {
     #[test]
     fn parse_navigate() {
         let data = parse_input(&SAMPLE_ROW);
-        let point = data[0].offset();
+        let point = Point::zero().offset_point(&data[0]);
         assert_eq!(Point::new(0, -3, 3), point);
     }
 
@@ -244,31 +235,47 @@ mod tests {
             (1, -3, 2, Direction::NorthWest),
             (0, -3, 3, Direction::SouthEast),
         ];
-        let mut directions = vec![];
+
+        let mut offset_point = Point::zero();
         for (x, y, z, direction) in steps.iter() {
             let point = Point::new(*x, *y, *z);
-            directions.push(*direction);
+
+            offset_point = offset_point.adjacent_point(*direction);
 
             assert_eq!(
-                point,
-                directions.offset(),
-                "Step {:?} failed. Added {:?} Expected {:?}",
-                directions.len(),
-                direction,
-                point
+                point, offset_point,
+                "Step failed. Added {:?} Expected {:?}",
+                direction, point
             );
         }
     }
 
     #[test]
     fn offset() {
-        assert_eq!(Point::new(-1, 1, 0), vec![Direction::East].offset());
-        assert_eq!(Point::new(-1, 0, 1), vec![Direction::SouthEast].offset());
-        assert_eq!(Point::new(0, -1, 1), vec![Direction::SouthWest].offset());
-
-        assert_eq!(Point::new(1, -1, 0), vec![Direction::West].offset());
-        assert_eq!(Point::new(1, 0, -1), vec![Direction::NorthWest].offset());
-        assert_eq!(Point::new(0, 1, -1), vec![Direction::NorthEast].offset());
+        assert_eq!(
+            Point::new(-1, 1, 0),
+            Point::zero().adjacent_point(Direction::East)
+        );
+        assert_eq!(
+            Point::new(-1, 0, 1),
+            Point::zero().adjacent_point(Direction::SouthEast)
+        );
+        assert_eq!(
+            Point::new(0, -1, 1),
+            Point::zero().adjacent_point(Direction::SouthWest)
+        );
+        assert_eq!(
+            Point::new(1, -1, 0),
+            Point::zero().adjacent_point(Direction::West)
+        );
+        assert_eq!(
+            Point::new(1, 0, -1),
+            Point::zero().adjacent_point(Direction::NorthWest)
+        );
+        assert_eq!(
+            Point::new(0, 1, -1),
+            Point::zero().adjacent_point(Direction::NorthEast)
+        );
     }
 
     #[test]
