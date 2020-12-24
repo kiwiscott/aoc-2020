@@ -184,7 +184,6 @@ fn part2(directions: &[Directions]) -> usize {
                     .count()
                     == 2
             })
-            .map(|p| p.clone())
             .collect();
 
         black_tiles = existing_tiles
