@@ -1,33 +1,47 @@
 use aoc_runner_derive::{aoc, aoc_generator};
 
 #[aoc_generator(day23)]
-fn parse_input(input: &str) -> Vec<u32> {
+fn parse_input(input: &str) -> Vec<usize> {
     input
         .chars()
         .take_while(|xchar| xchar.is_numeric())
-        .map(|xchar| xchar.to_string().parse::<u32>().unwrap())
-        .collect::<Vec<u32>>()
+        .map(|xchar| xchar.to_string().parse::<usize>().unwrap())
+        .collect::<Vec<usize>>()
 }
 
 #[aoc(day23, part1)]
-fn part1(cups: &[u32]) -> String {
+fn part1(cups: &[usize]) -> String {
     let mut crab_cups = CrabCups::new(cups);
     crab_cups.a_move(100);
-    crab_cups.result()
+
+    let mut n = 1;
+    let mut res = vec![];
+    loop {
+        n = crab_cups.cups[n];
+
+        if res.contains(&n.to_string()) || n == 1 {
+            break;
+        }
+        res.push(n.to_string());
+    }
+    res.join("")
 }
 
 #[aoc(day23, part2)]
-fn part2(cups: &[u32]) -> u32 {
-    let mut lot_sa_cups: Vec<u32> = cups.iter().map(|v| *v).collect();
-    let mut vec2: Vec<u32> = (10..=1_000_000).collect();
+fn part2(cups: &[usize]) -> usize {
+    let mut lot_sa_cups: Vec<usize> = cups.iter().map(|v| *v).collect();
+    let mut vec2: Vec<usize> = (10..=1_000_000).map(|v| v as usize).collect();
     lot_sa_cups.append(&mut vec2);
 
     //println!("{:?}", lot_sa_cups);
 
-    //let mut crab_cups = CrabCups::new(&lot_sa_cups);
-    //crab_cups.a_move(100);
-    //crab_cups.result()
-    0
+    let mut crab_cups = CrabCups::new(&lot_sa_cups);
+    crab_cups.a_move(10_000_000);
+
+    let a = crab_cups.cups[1];
+    let b = crab_cups.cups[crab_cups.cups[1]];
+    println!("{:?} * {:?} = {:?}", a, b, a * b);
+    a * b
 }
 
 /*
@@ -46,119 +60,87 @@ Determine which two cups will end up immediately clockwise of cup 1. What do you
 */
 
 struct CrabCups {
-    cups: Vec<u32>,
-    cup_holder: Vec<u32>,
-    current_index: usize,
-    max_cup: u32,
-    min_cup: u32,
+    cups: Vec<usize>,
+    max_cup: usize,
 }
 
 impl CrabCups {
-    fn new(cups: &[u32]) -> Self {
-        let buf: Vec<_> = cups.iter().map(|v| *v).collect();
+    fn new(cups: &[usize]) -> Self {
+        //Prepare the dict lookup
+        let mut ring = vec![0; cups.len() + 1];
+
+        ring[0] = cups[0];
+        for i in 1..cups.len() {
+            ring[cups[i - 1]] = cups[i];
+        }
+        ring[*cups.iter().last().unwrap() as usize] = ring[0];
+
         CrabCups {
-            cups: buf,
-            cup_holder: Vec::<u32>::with_capacity(3),
-            current_index: 0,
+            cups: ring,
             max_cup: *cups.iter().max().unwrap(),
-            min_cup: *cups.iter().min().unwrap(),
         }
     }
 
-    #[allow(irrefutable_let_patterns)]
     fn a_move(&mut self, moves: u32) {
-        let mut moves_left = moves;
+        let mut moves_done = 0;
 
-        while moves_left != 0 {
-            //println!("--- move {:?} ---", moves - moves_left + 1);
-            //println!(" cups: {:?}", self.cups);
-            //find the value and insert
-            let start_number = self.next();
-            let mut destination = start_number - 1;
-            if destination == 0 {
-                destination = self.max_cup;
-            }
-            self.move_cups();
-            //println!(
-            //    " active:*****{:?}************* : esearching for: {:?}",
-            //    start_number, destination
-            //);
-            //println!(" pick up: {:?}", self.cup_holder);
-            //println!(" X-cups: {:?}", self.cups);
+        let mut c_index = 0;
 
-            while let cup = self.next() {
-                //println!(" searching.......: {:?} == {:?}", destination, cup);
+        while moves_done != moves {
+            let current = self.cups[c_index];
 
-                if cup == destination {
-                    //println!(" destination: {:?}\n", destination);
-                    //println!(" move to destination: {:?}\n", self.current_index);
-                    self.insert_cups();
-                    break;
-                } else if destination == 0 || (cup == start_number && destination == self.min_cup) {
+            let cup_holder = [
+                self.cups[current],
+                self.cups[self.cups[current]],
+                self.cups[self.cups[self.cups[current]]],
+            ];
+
+            /*  println!("-----MOVE {:?}------", moves_done);
+            println!("Current: {:?}", current);
+
+            println!("cup_holder {:?}", cup_holder);
+            println!("order_cups {:?}", self.order_cups()); */
+
+            self.cups[current] = self.cups[cup_holder[2]];
+
+            let mut destination = current;
+            while destination == current || cup_holder.contains(&destination) {
+                destination -= 1;
+                if destination == 0 {
                     destination = self.max_cup;
-                } else if cup == start_number {
-                    destination -= 1;
                 }
             }
+            //println!("destination {:?}\n", destination);
 
+            //Insert back into the ring
+            self.cups[cup_holder[2]] = self.cups[destination];
+            self.cups[destination] = cup_holder[0];
             //Set up next Round
-            moves_left -= 1;
+            moves_done += 1;
             //move cursor to start number again
-            while let cup = self.next() {
-                if cup == start_number {
-                    break;
-                }
-            }
-            self.cup_holder.clear();
+            c_index = current;
         }
     }
 
-    #[allow(irrefutable_let_patterns)]
-    fn result(&mut self) -> String {
-        while let cup = self.next() {
-            if cup == 1 {
+    fn order_cups(&self) -> Vec<usize> {
+        let mut n = 0;
+        /* println!(
+            "{:?}",
+            self.cups
+                .iter()
+                .enumerate()
+                .map(|(i, v)| (i, *v))
+                .collect::<Vec::<(usize, usize)>>()
+        ); */
+        let mut res = vec![];
+        loop {
+            n = self.cups[n];
+            if res.contains(&n) {
                 break;
             }
+            res.push(n);
         }
-        let mut s = String::new();
-        while let cup = self.next() {
-            if cup == 1 {
-                break;
-            }
-            s.push_str(&cup.to_string());
-        }
-        s
-    }
-
-    fn move_cups(&mut self) {
-        for _ in 0..3 {
-            let mut remove = self.current_index;
-            if remove >= self.cups.len() {
-                remove = 0;
-            }
-            let i = self.cups.remove(remove);
-            self.cup_holder.push(i);
-        }
-    }
-    fn insert_cups(&mut self) {
-        while let Some(c) = self.cup_holder.pop() {
-            //println!(" inserting:{:?} at index:{:?}", c, self.current_index);
-
-            self.cups.insert(self.current_index, c);
-        }
-    }
-
-    fn next(&mut self) -> u32 {
-        match self.cups.get(self.current_index) {
-            Some(n) => {
-                self.current_index += 1;
-                *n
-            }
-            None => {
-                self.current_index = 0;
-                self.next()
-            }
-        }
+        res
     }
 }
 
@@ -169,43 +151,24 @@ mod tests {
     #[test]
     fn test_part_b() {
         let data = parse_input(&SAMPLE_DATA);
-        let max = data.iter().max().unwrap();
-
-        let mut lot_sa_cups: Vec<u32> = data.iter().map(|v| *v).collect();
-        let mut vec2: Vec<u32> = ((max+1)..=1_000_000).collect();
-        lot_sa_cups.append(&mut vec2);
-        
-        let mut crab_cups = CrabCups::new(&lot_sa_cups);
-        crab_cups.a_move(1_000_000);
-
-        let mut a:u32 = 0; 
-        let mut b:u32 = 0; 
-
-
-
-        #[allow(irrefutable_let_patterns)]
-        while let n = crab_cups.next(){
-            if n ==1{
-                let a = crab_cups.next(); 
-                let b =  crab_cups.next();
-                println!("{:?} * {:?} = {:?}",a,b,a*b);
-                break; 
-            }
-        }
-
-        //934001 and then 159792; multiplying these together produces 149245887792.
-        assert_eq!(934001,a);
-        assert_eq!(159792,b);
-        assert_eq!(149245887792,a as u64*b as u64);
+        let x = part2(&data);
+        assert_eq!(149245887792, x);
     }
 
     #[test]
-    fn test_10_moves() {
+    fn test_part_1() {
         let data = parse_input(&SAMPLE_DATA);
-        let mut crab_cups = CrabCups::new(&data);
-        crab_cups.a_move(10);
+        let s = part1(&data);
+        assert_eq!("67384529", s);
+    }
 
-        assert_eq!("92658374", crab_cups.result());
+    #[test]
+    fn test_3_moves() {
+        let data = parse_input(&SAMPLE_DATA);
+
+        let mut crab_cups = CrabCups::new(&data);
+        crab_cups.a_move(1);
+        assert_eq!(order_cups(crab_cups), [3, 2, 8, 9, 1, 5, 4, 6, 7]);
     }
 
     #[test]
@@ -213,16 +176,38 @@ mod tests {
         let data = parse_input(&SAMPLE_DATA);
 
         let mut crab_cups = CrabCups::new(&data);
-        crab_cups.a_move(1);
-        assert_eq!(crab_cups.cups, [3, 2, 8, 9, 1, 5, 4, 6, 7]);
+        crab_cups.a_move(2);
+        assert_eq!(order_cups(crab_cups), [3, 2, 5, 4, 6, 7, 8, 9, 1]);
     }
+
+    fn order_cups(cc: CrabCups) -> Vec<usize> {
+        let mut n = 0;
+        println!(
+            "{:?}",
+            cc.cups
+                .iter()
+                .enumerate()
+                .map(|(i, v)| (i, *v))
+                .collect::<Vec::<(usize, usize)>>()
+        );
+        let mut res = vec![];
+        loop {
+            n = cc.cups[n];
+            if res.contains(&n) {
+                break;
+            }
+            res.push(n);
+        }
+        res
+    }
+
     #[test]
     fn test_1_move() {
         let data = parse_input(&SAMPLE_DATA);
 
         let mut crab_cups = CrabCups::new(&data);
         crab_cups.a_move(1);
-        assert_eq!(crab_cups.cups, [3, 2, 8, 9, 1, 5, 4, 6, 7]);
+        assert_eq!(order_cups(crab_cups), [3, 2, 8, 9, 1, 5, 4, 6, 7]);
     }
 
     #[test]
